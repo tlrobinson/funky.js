@@ -1,15 +1,15 @@
 // Copyright 2011 Thomas Robinson. All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 
+//
 //    1. Redistributions of source code must retain the above copyright notice, this list of
 //       conditions and the following disclaimer.
-// 
+//
 //    2. Redistributions in binary form must reproduce the above copyright notice, this list
 //       of conditions and the following disclaimer in the documentation and/or other materials
 //       provided with the distribution.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THOMAS ROBINSON ``AS IS'' AND ANY EXPRESS OR IMPLIED
 // WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
 // FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THOMAS ROBINSON OR
@@ -19,7 +19,7 @@
 // ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-// 
+//
 // The views and conclusions contained in the software and documentation are those of the
 // authors and should not be interpreted as representing official policies, either expressed
 // or implied, of Thomas Robinson.
@@ -66,7 +66,7 @@ Funky.serial = function() {
         next.ARGS[opts.arg] = newCallback;
 
         return opts.funk.apply(next.THIS, next.ARGS);
-        
+
         function newCallback() {
             var result;
             if (typeof oldCallback === "function") {
@@ -82,15 +82,37 @@ Funky.serial = function() {
         // check the length is less than the backlock, or there is none in progress
         if (pending.length < opts.backlog || !running) {
             pending.push({ THIS : this, ARGS : toArray.call(arguments) });
+        } else {
+            // console.warn("DROPPED!");
         }
         runNext();
     };
 }
+//
+// Funky.throttle = function() {
+//     var opts = parseArgs(arguments);
+//     opts.delay = opts.args.length > 0 ? opts.args.shift() : 0;
+//
+//     var limit = new Date();
+//     return function() {
+//         var now = new Date();
+//         console.log(limit, now)
+//         if (now >= limit) {
+//             limit = new Date(now.getTime() + opts.delay);
+//             opts.funk.apply(this, arguments);
+//         } else {
+//             // TODO: is this the desired behavoir?
+//             console.log("dropping");
+//             var callback = arguments[opts.arg];
+//             callback && callback();
+//         }
+//     };
+// }
 
 Funky.delayInvocation = function() {
     var opts = parseArgs(arguments);
     opts.delay = opts.args.length > 0 ? opts.args.shift() : 0;
-    
+
     return function() {
         setTimeout(opts.funk.bind.apply([this].concat(arguments)), opts.delay);
     };
@@ -99,7 +121,7 @@ Funky.delayInvocation = function() {
 Funky.delayCompletion = function() {
     var opts = parseArgs(arguments);
     opts.delay = opts.args.length > 0 ? opts.args.shift() : 0;
-    
+
     return function() {
         var args = toArray.call(arguments);
 
@@ -107,7 +129,7 @@ Funky.delayCompletion = function() {
         args[opts.arg] = newCallback;
 
         return opts.funk.apply(this, args);
-        
+
         function newCallback() {
             setTimeout(function() {
                 if (typeof oldCallback === "function") {
@@ -121,13 +143,13 @@ Funky.delayCompletion = function() {
 Funky.timeout = function() {
     var opts = parseArgs(arguments);
     opts.timeout = opts.args.length > 0 ? opts.args.shift() : 0;
-    
+
     return function() {
         var args = toArray.call(arguments);
 
         var oldCallback = args[opts.arg];
         args[opts.arg] = newCallback;
-        
+
         var hasFired = false;
         var timerID = setTimeout(newCallback, opts.timeout);
 
@@ -149,20 +171,20 @@ Funky.forEach = Funky.map = function(/* array[, callback], funk[, arg] */) {
     var opts = parseArgs(arguments);
     var array = toArray.call(opts.args.shift());
     var callback = opts.args.length > 0 ? opts.args.shift() : null;
-    
+
     var result = [];
 
     if (array.length === 0) {
         callback && callback(result);;
         return;
     }
-    
+
     var count = 0;
     array.forEach(function(item, index) {
         ++count;
         opts.funk(item, checkCompletion.bind(null, index))
     });
-    
+
     function checkCompletion(index, value) {
         result[index] = value;
         if (--count) {
@@ -173,7 +195,7 @@ Funky.forEach = Funky.map = function(/* array[, callback], funk[, arg] */) {
 
 // Funky.template = function() {
 //     var opts = parseArgs(arguments);
-//     
+//
 //     return function() {
 //         var args = toArray.call(arguments);
 //         args[opts.arg]
