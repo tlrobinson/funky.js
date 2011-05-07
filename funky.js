@@ -48,18 +48,30 @@ function parseArgs(args) {
     return options;
 }
 
+function matchFnArgs(funk, newFunk) {
+    switch (funk.length) {
+        case 0: return function() { return newFunk.apply(this, arguments); };
+        case 1: return function(a) { return newFunk.apply(this, arguments); };
+        case 2: return function(a,b) { return newFunk.apply(this, arguments); };
+        case 3: return function(a,b,c) { return newFunk.apply(this, arguments); };
+        case 4: return function(a,b,c,d) { return newFunk.apply(this, arguments); };
+        case 5: return function(a,b,c,d,e) { return newFunk.apply(this, arguments); };
+    }
+}
+
 // Ensures mutual exclusion of a single asynchronous function. Configurable callback and backlog.
-Funky.serial = function() {
+Funky.serial = function(/* [backlog,[ parallel,]] funk [, arg] */) {
     var opts = parseArgs(arguments);
     opts.backlog = opts.args.length > 0 ? opts.args.shift() : Infinity;
+    opts.parallel = opts.args.length > 0 ? opts.args.shift() : 1;
 
     var pending = [];
-    var running = false;
+    var running = 0;
     function runNext() {
-        if (pending.length === 0 || running) {
+        if (pending.length === 0 || running >= opts.parallel) {
             return;
         }
-        running = true;
+        running++;
 
         var next = pending.shift();
         var oldCallback = next.ARGS[opts.arg];
@@ -72,21 +84,21 @@ Funky.serial = function() {
             if (typeof oldCallback === "function") {
                 result = oldCallback.apply(this, arguments);
             }
-            running = false;
+            running--;
             setTimeout(runNext, 0);
             return result;
         }
     }
 
-    return function() {
+    return matchFnArgs(opts.funk, function() {
         // check the length is less than the backlock, or there is none in progress
-        if (pending.length < opts.backlog || !running) {
+        if (pending.length < opts.backlog || running === 0) {
             pending.push({ THIS : this, ARGS : toArray.call(arguments) });
         } else {
             // console.warn("DROPPED!");
         }
         runNext();
-    };
+    });
 }
 //
 // Funky.throttle = function() {
@@ -113,16 +125,16 @@ Funky.delayInvocation = function() {
     var opts = parseArgs(arguments);
     opts.delay = opts.args.length > 0 ? opts.args.shift() : 0;
 
-    return function() {
+    matchFnArgs(opts.funk, function() {
         setTimeout(opts.funk.bind.apply([this].concat(arguments)), opts.delay);
-    };
+    });
 }
 
 Funky.delayCompletion = function() {
     var opts = parseArgs(arguments);
     opts.delay = opts.args.length > 0 ? opts.args.shift() : 0;
 
-    return function() {
+    return matchFnArgs(opts.funk, function() {
         var args = toArray.call(arguments);
 
         var oldCallback = args[opts.arg];
@@ -137,21 +149,24 @@ Funky.delayCompletion = function() {
                 }
             }, opts.delay);
         }
-    }
+    });
 }
 
-Funky.timeout = function() {
+Funky.timeout = function(/* [timeout,] funk [, arg] */) {
     var opts = parseArgs(arguments);
     opts.timeout = opts.args.length > 0 ? opts.args.shift() : 0;
 
-    return function() {
+    return matchFnArgs(opts.funk, function() {
         var args = toArray.call(arguments);
 
         var oldCallback = args[opts.arg];
         args[opts.arg] = newCallback;
 
         var hasFired = false;
-        var timerID = setTimeout(newCallback, opts.timeout);
+        var timerID = setTimeout(function() {
+            console.log("TIMEOUT!");
+            newCallback();
+        }, opts.timeout);
 
         return opts.funk.apply(this, args);
 
@@ -164,31 +179,39 @@ Funky.timeout = function() {
             hasFired = true;
             return result;
         }
-    }
+    });
 }
 
-Funky.forEach = Funky.map = function(/* array[, callback], funk[, arg] */) {
-    var opts = parseArgs(arguments);
-    var array = toArray.call(opts.args.shift());
-    var callback = opts.args.length > 0 ? opts.args.shift() : null;
-
-    var result = [];
-
-    if (array.length === 0) {
-        callback && callback(result);;
-        return;
+Funky.forEach = Funky.map = function(/* array, funk[, arg][, callback] */) {
+    arguments = toArray.call(arguments);
+    
+    var callback = null;
+    if (arguments.length > 2 && typeof arguments[arguments.length-1] === "function") {
+        callback = arguments.pop();
     }
 
-    var count = 0;
-    array.forEach(function(item, index) {
-        ++count;
-        opts.funk(item, checkCompletion.bind(null, index))
-    });
+    var opts = parseArgs(arguments);
+    var array = toArray.call(opts.args.shift());
 
-    function checkCompletion(index, value) {
-        result[index] = value;
-        if (--count) {
-            callback && callback(result);;
+    var results = [];
+    var pending = array.length;
+
+    var completed = false;
+    var iterating = true;
+    array.forEach(function(item, index, arr) {
+        opts.funk(item, function(value) {
+            results[index] = value;
+            pending--;
+            checkCompletion();
+        }, index, arr);
+    });
+    iterating = false;
+    checkCompletion();
+    
+    function checkCompletion() {
+        if (pending === 0 && !iterating) {
+            completed = true;
+            callback && callback(results);
         }
     };
 }
@@ -196,11 +219,11 @@ Funky.forEach = Funky.map = function(/* array[, callback], funk[, arg] */) {
 // Funky.template = function() {
 //     var opts = parseArgs(arguments);
 //
-//     return function() {
+//     return matchFnArgs(opts.funk, function() {
 //         var args = toArray.call(arguments);
 //         args[opts.arg]
 //         return opts.funk.apply(this, args);
-//     }
+//     });
 // }
 
 })(typeof exports !== "undefined" ? exports : (Funky = {}));
